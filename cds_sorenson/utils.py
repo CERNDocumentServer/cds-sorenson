@@ -26,7 +26,7 @@
 
 from __future__ import absolute_import, print_function
 
-from os.path import basename, dirname, normpath
+from os.path import dirname, normpath
 
 import requests
 from flask import current_app
@@ -34,20 +34,15 @@ from flask import current_app
 from .error import SorensonError
 
 
-def generate_json_for_encoding(input_file, preset_name, output_file=None):
+def generate_json_for_encoding(input_file, preset_id, output_file):
     """Generate JSON that will be sent to Sorenson server to start encoding."""
-    output_file = output_file or normpath('{0}/{1}/{2}-{3}'.format(
-        current_app.config['CDS_SORENSON_OUTPUT_FOLDER'],
-        dirname(input_file), basename(input_file), preset_name)
-    )
-
-    try:
-        preset_id = current_app.config['CDS_SORENSON_PRESETS'][preset_name][0]
-    except KeyError:
-        raise SorensonError('Invalid preset "{0}"'.format(preset_name))
+    current_preset = _get_preset_config(preset_id)
+    # Make sure the preset config exists for a given preset_id
+    if not current_preset:
+        raise SorensonError('Invalid preset "{0}"'.format(preset_id))
 
     return dict(
-        Name='CDS File:{0} Preset:{1}'.format(input_file, preset_name),
+        Name='CDS File:{0} Preset:{1}'.format(input_file, preset_id),
         QueueId=current_app.config['CDS_SORENSON_DEFAULT_QUEUE'],
         JobMediaInfo=dict(
             SourceMediaList=dict(
@@ -59,6 +54,18 @@ def generate_json_for_encoding(input_file, preset_name, output_file=None):
             CompressionPresetList=[dict(PresetId=preset_id)],
         ),
     )
+
+
+def name_generator(master_name, preset):
+    """Generate the output name for slave file.
+
+    :param master_name: string with the name of the master file.
+    :param preset: dictionary with the preset information.
+    :returns: string with the slave name for this preset.
+    """
+    return ("{master_name}-{video_bitrate}-kbps-{width}x{height}-audio-"
+            "{audio_bitrate}-kbps-stereo.mp4".format(master_name='master_name',
+                                                     **preset))
 
 
 def get_status(job_id):
@@ -89,3 +96,12 @@ def get_status(job_id):
         return response.text
     else:
         raise SorensonError(response.status_code)
+
+
+def _get_preset_config(preset_id):
+    """Return preset config based on the preset_id."""
+    PRESETS = current_app.config['CDS_SORENSON_PRESETS']
+    presets_list = [item for presets in PRESETS.values() for item in presets]
+    for preset in presets_list:
+        if preset_id == preset.get('preset_id'):
+            return preset

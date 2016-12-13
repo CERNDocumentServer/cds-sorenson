@@ -92,7 +92,8 @@ def test_start_encoding(requests_post_mock, app, start_response):
     """Test if starting encoding works."""
     filename = 'file://cernbox-smb.cern.ch/eoscds/test/sorenson_input/' \
                '1111-dddd-3333-aaaa/data.mp4'
-    preset = 'Youtube 480p'
+    # Random preset from config
+    preset = 'dc2187a3-8f64-4e73-b458-7370a88d92d7'
 
     # Mock sorenson response
     sorenson_response = MagicMock()
@@ -153,7 +154,8 @@ def test_restart_encoding(requests_delete_mock, requests_post_mock, app,
     """Test if restarting encoding works."""
     job_id = "1111-2222-aaaa"
     filename = '/sorenson_input/1111-dddd-3333-aaaa/data.mp4'
-    preset = 'Youtube 480p'
+    # Random preset from config
+    preset = 'dc2187a3-8f64-4e73-b458-7370a88d92d7'
 
     # Mock sorenson responses
     delete_response = MagicMock()

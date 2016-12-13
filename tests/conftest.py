@@ -37,7 +37,6 @@ from cds_sorenson import CDSSorenson
 def config():
     """Custom config for testing purposes."""
     return dict(
-        CDS_SORENSON_OUTPUT_FOLDER='file://cernbox-smb/sorenson_output/',
         TESTING=True
     )
 
