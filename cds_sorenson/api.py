@@ -194,3 +194,9 @@ def get_preset_id(preset_quality, display_aspect_ratio, **kwargs):
             raise InvalidResolutionError(display_aspect_ratio, preset_quality)
     except KeyError:
         raise InvalidAspectRatioError(display_aspect_ratio)
+
+
+def get_preset_info(aspect_ratio, preset_quality):
+    """Return technical information about given preset."""
+    return current_app.config['CDS_SORENSON_PRESETS'].get(
+        aspect_ratio, {}).get(preset_quality)

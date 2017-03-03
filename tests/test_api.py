@@ -34,8 +34,8 @@ from mock import MagicMock, patch
 from cds_sorenson import CDSSorenson
 from cds_sorenson.api import get_available_aspect_ratios, \
     get_available_preset_qualities, get_encoding_status, get_preset_id, \
-    get_presets_by_aspect_ratio, restart_encoding, start_encoding, \
-    stop_encoding
+    get_preset_info, get_presets_by_aspect_ratio, restart_encoding, \
+    start_encoding, stop_encoding
 from cds_sorenson.error import InvalidAspectRatioError, \
     InvalidResolutionError, SorensonError
 
@@ -221,3 +221,14 @@ def test_get_preset_id(app):
         get_preset_id('480p', '27:9')
     with pytest.raises(InvalidResolutionError):
         get_preset_id('480p', '20:9')
+
+
+def test_get_preset_info(app):
+    """Test `get_preset_info` function."""
+    info_keys = ['width', 'height', 'audio_bitrate', 'video_bitrate',
+                 'total_bitrate', 'frame_rate', 'preset_id']
+    for aspect_ratio in get_available_aspect_ratios():
+        for preset_quality in \
+                app.config['CDS_SORENSON_PRESETS'][aspect_ratio].keys():
+            assert all([key in get_preset_info(aspect_ratio, preset_quality)
+                        for key in info_keys])
