@@ -96,7 +96,37 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'video_bitrate': 386,
             'total_bitrate': 450,
             'frame_rate': 15,
-            'preset_id': '55f586de-15a0-45cd-bd30-bb6cf5bfe2b8'})])),
+            'preset_id': '55f586de-15a0-45cd-bd30-bb6cf5bfe2b8'}),
+        ('2160p', {
+            'width': 3840,
+            'height': 2160,
+            'audio_bitrate': 128,
+            'video_bitrate': 19872,
+            'total_bitrate': 20000,
+            'frame_rate': 25,
+            'preset_id': '71d9865f-779d-4421-b62e-df93135b41c6'}),
+        ('2160ph265', {
+            # Different codec: H.265 - for download only - no SMIL file
+            'width': 3840,
+            'height': 2160,
+            'audio_bitrate': 128,
+            'video_bitrate': 19872,
+            'total_bitrate': 20000,
+            'frame_rate': 25,
+            'preview': False,
+            'smil': False,
+            'preset_id': 'a0f072d3-c319-47e1-bdc4-787ad10be63c'}),
+        ('1080ph265', {
+            # Different codec: H.265 - for download only - no SMIL file
+            'width': 1920,
+            'height': 1080,
+            'audio_bitrate': 128,
+            'video_bitrate': 5872,
+            'total_bitrate': 6000,
+            'frame_rate': 25,
+            'preview': False,
+            'smil': False,
+            'preset_id': 'fd15cb19-6750-4872-a82b-e4625b842c30'})])),
     ('4:3', OrderedDict([
         ('360p', {
             'width': 480,
@@ -180,7 +210,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 15,
             'preset_id': '4ee80866-a960-41a7-887d-50041e991300'})])),
     ('20:9', OrderedDict([
-          ('240p', {
+        ('240p', {
             'width': 534,
             'height': 240,
             'audio_bitrate': 64,
@@ -228,7 +258,26 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'video_bitrate': 386,
             'total_bitrate': 450,
             'frame_rate': 15,
-            'preset_id': 'aa20a566-31ce-4e9c-b0ab-edc6b5f4146d'})])),
+            'preset_id': 'aa20a566-31ce-4e9c-b0ab-edc6b5f4146d'}),
+        ('2160p', {
+            'width': 4096,
+            'height': 2160,
+            'audio_bitrate': 128,
+            'video_bitrate': 19872,
+            'total_bitrate': 20000,
+            'frame_rate': 25,
+            'preset_id': 'beed7d75-4b78-46b7-9645-1a30413735ba'}),
+        ('2160ph265', {
+            # Different codec H.265 - for preview only - no SMIL file
+            'width': 4096,
+            'height': 2160,
+            'audio_bitrate': 128,
+            'video_bitrate': 19872,
+            'total_bitrate': 20000,
+            'frame_rate': 25,
+            'preview': False,
+            'smil': False,
+            'preset_id': 'bddf6b9f-c15a-4333-9809-bdb9a244056b'})])),
     ('64:35', OrderedDict([
         ('360p', {
             'width': 658,
@@ -292,6 +341,12 @@ CDS_SORENSON_PRESETS = OrderedDict([
 
 The first preset of each list is the previewer (slave small enough to be
 quickly created but not too small to not be very pixelated).
+
+Optional parameters for each preset configuration:
+preview: specifies if the file should be available for preview or only for
+    downloading (default is True)
+smil: specifies if this file should be added to the SMIL file
+    (default is True)
 """
 
 CDS_SORENSON_NAME_GENERATOR = 'cds_sorenson.utils.name_generator'
