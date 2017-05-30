@@ -35,7 +35,7 @@ from cds_sorenson import CDSSorenson
 
 @pytest.fixture()
 def config():
-    """Custom config for testing purposes."""
+    """Config for testing purposes."""
     return dict(
         TESTING=True
     )
@@ -56,13 +56,13 @@ def app(config):
 
 @pytest.fixture()
 def start_response():
-    """Example response when starting new encoding job."""
+    """Return response from starting a new encoding job."""
     return u'{"JobId":"1234-2345-abcd"}'
 
 
 @pytest.fixture()
 def running_job_status_response():
-    """Example response when checking the status of running encoding job."""
+    """Return response from checking the status of running encoding job."""
     return u"""{
         "EncodeServerId":null,
         "JobId":"11111111-aaaa",
@@ -97,7 +97,7 @@ def running_job_status_response():
 
 @pytest.fixture()
 def finished_job_status_response():
-    """Example response when checking the status of finished encoding job."""
+    """Return response from checking the status of finished encoding job."""
     return u"""{
        "TimeSubmittedIso8601":"2016-10-19T12:30:12.0000000Z",
        "PercentCompleteOverall":100,
