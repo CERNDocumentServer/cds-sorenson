@@ -194,6 +194,9 @@ def test_get_presets_by_aspect_ratio(app):
         '79e9bde9-adcc-4603-b686-c7e2cb2d73d2',
         '9bd7c93f-88fa-4e59-a811-c81f4b0543db',
         '55f586de-15a0-45cd-bd30-bb6cf5bfe2b8',
+        '71d9865f-779d-4421-b62e-df93135b41c6',
+        'a0f072d3-c319-47e1-bdc4-787ad10be63c',
+        'fd15cb19-6750-4872-a82b-e4625b842c30',
     ]
 
 
@@ -208,7 +211,9 @@ def test_available_aspect_ratios(app):
 def test_available_preset_qualities(app):
     """Test `get_available_preset_qualities` function."""
     assert get_available_preset_qualities() == ['360p', '1080p', '720p',
-                                                '480p', '240p', '1024p']
+                                                '480p', '240p', '2160p',
+                                                '2160ph265', '1080ph265',
+                                                '1024p']
 
 
 def test_get_preset_id(app):
@@ -232,3 +237,9 @@ def test_get_preset_info(app):
                 app.config['CDS_SORENSON_PRESETS'][aspect_ratio].keys():
             assert all([key in get_preset_info(aspect_ratio, preset_quality)
                         for key in info_keys])
+
+
+def test_no_smil_config_option(app):
+    """Test that some formats should not be added to the SMIL file."""
+    assert get_preset_info('16:9', '1080ph265').get('no_smil')
+    assert not get_preset_info('16:9', '1080p').get('no_smil')
