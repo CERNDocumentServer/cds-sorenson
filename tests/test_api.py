@@ -237,3 +237,9 @@ def test_get_preset_info(app):
                 app.config['CDS_SORENSON_PRESETS'][aspect_ratio].keys():
             assert all([key in get_preset_info(aspect_ratio, preset_quality)
                         for key in info_keys])
+
+
+def test_no_smil_config_option(app):
+    """Test that some formats should not be added to the SMIL file."""
+    assert not get_preset_info('16:9', '1080ph265').get('smil')
+    assert get_preset_info('16:9', '1080p').get('smil')

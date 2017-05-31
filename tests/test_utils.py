@@ -156,5 +156,7 @@ def test_get_preset_config(app):
         'video_bitrate': 836,
         'total_bitrate': 900,
         'frame_rate': 25,
+        'smil': True,
+        'download': False,
         'preset_id': 'dc2187a3-8f64-4e73-b458-7370a88d92d7',
     }
