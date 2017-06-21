@@ -37,7 +37,7 @@ from cds_sorenson.api import get_available_aspect_ratios, \
     get_preset_info, get_presets_by_aspect_ratio, restart_encoding, \
     start_encoding, stop_encoding
 from cds_sorenson.error import InvalidAspectRatioError, \
-    InvalidResolutionError, SorensonError
+    InvalidResolutionError, SorensonError, TooHighResolutionError
 
 
 class MockRequests(object):
@@ -103,6 +103,9 @@ def test_start_encoding(requests_post_mock, app, start_response):
 
     job_id = start_encoding(filename, '', quality, aspect_ratio)
     assert job_id == "1234-2345-abcd"
+
+    with pytest.raises(TooHighResolutionError):
+        start_encoding(filename, '', quality, aspect_ratio, max_height=240)
 
 
 @patch('cds_sorenson.api.requests.get')
@@ -226,6 +229,14 @@ def test_get_preset_id(app):
         get_preset_id('480p', '27:9')
     with pytest.raises(InvalidResolutionError):
         get_preset_id('480p', '20:9')
+    with pytest.raises(TooHighResolutionError):
+        get_preset_id('1080p', '16:9', max_height=720)
+    with pytest.raises(TooHighResolutionError):
+        get_preset_id('1080p', '16:9', max_width=1280)
+    with pytest.raises(TooHighResolutionError):
+        get_preset_id('1080p', '16:9', max_height=720, max_width=1280)
+    assert get_preset_id(
+        '720p', '16:9', max_height=720, max_width=1280) is not None
 
 
 def test_get_preset_info(app):

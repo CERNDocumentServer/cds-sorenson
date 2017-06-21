@@ -34,12 +34,13 @@ import requests
 from flask import current_app
 
 from .error import InvalidAspectRatioError, InvalidResolutionError, \
-    SorensonError
+    SorensonError, TooHighResolutionError
 from .utils import _filepath_for_samba, generate_json_for_encoding, get_status
 
 
 def start_encoding(input_file, output_file, preset_quality,
-                   display_aspect_ratio, **kwargs):
+                   display_aspect_ratio, max_height=None, max_width=None,
+                   **kwargs):
     """Encode a video that is already in the input folder.
 
     :param input_file: string with the filename, something like
@@ -49,6 +50,8 @@ def start_encoding(input_file, output_file, preset_quality,
     :param output_file: the file to output the transcoded file.
     :param preset_quality: quality of the preset.
     :param display_aspect_ratio: the video's aspect ratio
+    :param max_height: maximum height we want to encode
+    :param max_width: maximum width we want to encode
     :param kwargs: other technical metadata
     :returns: job ID.
     """
@@ -58,7 +61,8 @@ def start_encoding(input_file, output_file, preset_quality,
     current_app.logger.debug('Encoding {0} with preset quality {1}'
                              .format(input_file, preset_quality))
 
-    preset_id = get_preset_id(preset_quality, display_aspect_ratio)
+    preset_id = get_preset_id(preset_quality, display_aspect_ratio,
+                              max_height=max_height, max_width=max_width)
 
     # Build the request of the encoding job
     json_params = generate_json_for_encoding(input_file, output_file,
@@ -119,7 +123,7 @@ def get_encoding_status(job_id):
     job_progress = status_json.get('Status', {}).get('Progress')
     if job_status:
         return current_app.config['CDS_SORENSON_STATUSES'].get(job_status), \
-               job_progress
+            job_progress
     # status not found? check in different place
     job_status = status_json.get('StatusStateId')
     if job_status:
@@ -177,7 +181,8 @@ def get_available_preset_qualities():
     return list(OrderedDict.fromkeys(chain(*all_qualities)))
 
 
-def get_preset_id(preset_quality, display_aspect_ratio, **kwargs):
+def get_preset_id(preset_quality, display_aspect_ratio,
+                  max_height=None, max_width=None, **kwargs):
     """Return the preset ID of the requested quality on given aspect ratio.
 
     :param preset_quality: the preset quality to use
@@ -188,12 +193,21 @@ def get_preset_id(preset_quality, display_aspect_ratio, **kwargs):
     try:
         aspect_ratio = current_app.config['CDS_SORENSON_PRESETS'][
             display_aspect_ratio]
-        try:
-            return aspect_ratio[preset_quality]['preset_id']
-        except KeyError:
-            raise InvalidResolutionError(display_aspect_ratio, preset_quality)
     except KeyError:
         raise InvalidAspectRatioError(display_aspect_ratio)
+
+    try:
+        preset_quality = aspect_ratio[preset_quality]
+    except KeyError:
+        raise InvalidResolutionError(display_aspect_ratio, preset_quality)
+
+    if (max_height and max_height < preset_quality['height']) or \
+            (max_width and max_width < preset_quality['width']):
+        raise TooHighResolutionError(display_aspect_ratio, max_height,
+                                     max_width, preset_quality['height'],
+                                     preset_quality['width'])
+
+    return preset_quality['preset_id']
 
 
 def get_preset_info(aspect_ratio, preset_quality):
