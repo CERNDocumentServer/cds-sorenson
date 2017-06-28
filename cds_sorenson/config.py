@@ -76,6 +76,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': True,
             'download': True,
+            'type': 'hd',
             'preset_id': 'd9683573-f1c6-46a4-9181-d6048b2db305'}),
         ('720p', {
             'width': 1280,
@@ -116,6 +117,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': True,
             'download': True,
+            'type': '4k',
             'preset_id': '71d9865f-779d-4421-b62e-df93135b41c6'}),
         ('2160ph265', {
             # Different codec: H.265 - for download only - no SMIL file
@@ -127,6 +129,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': False,
             'download': True,
+            'type': '4k',
             'preset_id': 'a0f072d3-c319-47e1-bdc4-787ad10be63c'}),
         ('1080ph265', {
             # Different codec: H.265 - for download only - no SMIL file
@@ -138,6 +141,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': False,
             'download': True,
+            'type': 'hd',
             'preset_id': 'fd15cb19-6750-4872-a82b-e4625b842c30'})])),
     ('4:3', OrderedDict([
         ('360p', {
@@ -272,6 +276,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': True,
             'download': True,
+            'type': 'hd',
             'preset_id': '4e2d0677-317d-4aa3-9228-bdca00005f9f'}),
         ('720p', {
             'width': 1360,
@@ -312,6 +317,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': True,
             'download': True,
+            'type': '4k',
             'preset_id': 'beed7d75-4b78-46b7-9645-1a30413735ba'}),
         ('2160ph265', {
             # Different codec H.265 - for preview only - no SMIL file
@@ -323,6 +329,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': False,
             'download': True,
+            'type': '4k',
             'preset_id': 'bddf6b9f-c15a-4333-9809-bdb9a244056b'})])),
     ('64:35', OrderedDict([
         ('360p', {
