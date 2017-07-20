@@ -85,7 +85,6 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'total_bitrate': 2800,
             'frame_rate': 25,
             'smil': True,
-            'download': True,
             'preset_id': '79e9bde9-adcc-4603-b686-c7e2cb2d73d2'}),
         ('480p', {
             'width': 854,
