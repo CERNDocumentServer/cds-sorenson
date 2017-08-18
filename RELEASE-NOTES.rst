@@ -2,14 +2,12 @@
  cds-sorenson v0.1.0
 =====================
 
-cds-sorenson v0.1.0 was released on TBD, 2016.
+cds-sorenson v0.1.0 was released on August 18, 2017.
 
 About
 -----
 
-CDS API to use Sorenson transcoding server
-
-*This is an experimental developer preview release.*
+CDS API to use Sorenson transcoding server.
 
 What's new
 ----------
