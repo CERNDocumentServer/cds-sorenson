@@ -441,5 +441,5 @@ CDS_SORENSON_STATUSES = {
 CDS_SORENSON_SAMBA_DIRECTORY = 'file://cernbox-smb.cern.ch/eoscds/'
 """Sorenson's EOS internal mounting point via samba."""
 
-CDS_SORENSON_CDS_DIRECTORY = '/eos/workspace/c/cds/'
+CDS_SORENSON_CDS_DIRECTORY = 'root://eospublic.cern.ch//eos/workspace/c/cds/'
 """Video base file location in CDS."""
