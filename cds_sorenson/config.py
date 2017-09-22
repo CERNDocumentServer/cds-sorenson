@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of CERN Document Server.
-# Copyright (C) 2016 CERN.
+# Copyright (C) 2016, 2017 CERN.
 #
 # Invenio is free software; you can redistribute it
 # and/or modify it under the terms of the GNU General Public License as
@@ -155,6 +155,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'total_bitrate': 5500,
             'frame_rate': 25,
             'smil': True,
+            'type': 'hd',
             'download': True,
             'preset_id': '216d5415-7d11-471c-bd06-0c013f657494'}),
         ('720p', {
@@ -165,6 +166,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'total_bitrate': 2500,
             'frame_rate': 25,
             'smil': True,
+            'type': 'hd',
             'download': True,
             'preset_id': '28ec9d35-00f3-400b-a955-dfb52f9d45ae'}),
         ('480p', {
@@ -203,6 +205,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'total_bitrate': 5600,
             'frame_rate': 25,
             'smil': True,
+            'type': 'hd',
             'download': True,
             'preset_id': 'a3784f67-777a-42bc-8aa4-1a585d49276b'}),
         ('720p', {
@@ -213,6 +216,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'total_bitrate': 2600,
             'frame_rate': 25,
             'smil': True,
+            'type': 'hd',
             'download': True,
             'preset_id': 'c3a1f9b0-b1dd-4987-b2b1-cd7936f114ed'}),
         ('480p', {
@@ -272,6 +276,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'total_bitrate': 2800,
             'frame_rate': 25,
             'smil': True,
+            'type': 'hd',
             'download': True,
             'preset_id': 'dac209c0-1d2b-4cef-907d-882c30407690'}),
         ('480p', {
@@ -333,6 +338,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 25,
             'smil': True,
             'download': True,
+            'type': 'hd',
             'preset_id': 'b4426e61-60fc-44ef-8281-8e838a107f8e'})])),
     ('2:1', OrderedDict([
         ('360p', {
@@ -352,6 +358,7 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'total_bitrate': 6000,
             'frame_rate': 25,
             'smil': True,
+            'type': 'hd',
             'download': True,
             'preset_id': '0149f7e7-e286-4604-a80a-23021b7d71b4'}),
         ('720p', {
