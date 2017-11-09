@@ -35,6 +35,7 @@ from flask import current_app
 
 from .error import InvalidAspectRatioError, InvalidResolutionError, \
     SorensonError, TooHighResolutionError
+from .proxies import current_cds_sorenson
 from .utils import _filepath_for_samba, generate_json_for_encoding, get_status
 
 
@@ -152,15 +153,6 @@ def restart_encoding(job_id, input_file, output_file, preset_quality,
                           display_aspect_ratio, **kwargs)
 
 
-def get_presets_by_aspect_ratio(aspect_ratio):
-    """Return the list of preset IDs for a given aspect ratio."""
-    try:
-        inner_dict = current_app.config['CDS_SORENSON_PRESETS'][aspect_ratio]
-        return [preset['preset_id'] for preset in inner_dict.values()]
-    except KeyError:
-        raise InvalidAspectRatioError(aspect_ratio)
-
-
 def get_available_aspect_ratios(pairs=False):
     """Return all available aspect ratios.
 
@@ -174,19 +166,38 @@ def get_available_aspect_ratios(pairs=False):
 
 def get_available_preset_qualities():
     """Return all available preset qualities."""
+    # get all possible qualities
     all_qualities = [
         outer_dict.keys()
         for outer_dict in current_app.config['CDS_SORENSON_PRESETS'].values()
     ]
+    # remove duplicates while preserving ordering
     return list(OrderedDict.fromkeys(chain(*all_qualities)))
 
 
-def get_preset_id(preset_quality, display_aspect_ratio,
-                  max_height=None, max_width=None, **kwargs):
+def get_closest_aspect_ratio(height, width):
+    """Return the closest configured aspect ratio to the given height/width.
+
+    :param height: video height
+    :param width: video width
+    """
+    # calculate the aspect ratio fraction
+    unknown_ar_fraction = float(width) / height
+
+    # find the closest aspect ratio fraction to the unknown
+    closest_fraction = min(current_cds_sorenson.aspect_ratio_fractions.keys(),
+                           key=lambda x: abs(x - unknown_ar_fraction))
+    return current_cds_sorenson.aspect_ratio_fractions[closest_fraction]
+
+
+def get_preset_id(preset_quality, display_aspect_ratio, max_height=None,
+                  max_width=None):
     """Return the preset ID of the requested quality on given aspect ratio.
 
     :param preset_quality: the preset quality to use
     :param display_aspect_ratio: the video's aspect ratio
+    :param max_height: maximum output height for transcoded video
+    :param max_width: maximum output width for transcoded video
     :returns the corresponding preset ID or `None` if the given aspect ratio
     does not support this quality
     """

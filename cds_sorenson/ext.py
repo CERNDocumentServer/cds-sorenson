@@ -28,6 +28,8 @@ from __future__ import absolute_import, print_function
 
 import os
 
+from werkzeug.utils import cached_property
+
 from . import config
 
 
@@ -37,6 +39,7 @@ class CDSSorenson(object):
     def __init__(self, app=None):
         """Extension initialization."""
         if app:
+            self.app = app
             self.init_app(app)
 
     def init_app(self, app):
@@ -56,3 +59,14 @@ class CDSSorenson(object):
                 'http': os.environ.get('APP_CDS_SORENSON_PROXIES_HTTP'),
                 'https': os.environ.get('APP_CDS_SORENSON_PROXIES_HTTPS')
             }
+
+    @cached_property
+    def aspect_ratio_fractions(self):
+        """Map aspect ratios with their computed fractions."""
+        fractions_with_ar = {}
+        for ar in self.app.config['CDS_SORENSON_PRESETS']:
+            sorenson_w, sorenson_h = ar.split(':')
+            sorenson_ar_fraction = float(sorenson_w) / float(sorenson_h)
+            fractions_with_ar.setdefault(sorenson_ar_fraction, ar)
+
+        return fractions_with_ar
