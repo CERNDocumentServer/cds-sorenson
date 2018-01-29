@@ -205,7 +205,10 @@ def get_preset_id(preset_quality, display_aspect_ratio, max_height=None,
         aspect_ratio = current_app.config['CDS_SORENSON_PRESETS'][
             display_aspect_ratio]
     except KeyError:
-        raise InvalidAspectRatioError(display_aspect_ratio)
+        if max_height and max_width:
+            aspect_ratio = get_closest_aspect_ratio(max_height, max_width)
+        else:
+            raise InvalidAspectRatioError(display_aspect_ratio)
 
     try:
         preset_quality = aspect_ratio[preset_quality]
