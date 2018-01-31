@@ -1,8 +1,8 @@
 =====================
- cds-sorenson v0.1.2
+ cds-sorenson v0.1.3
 =====================
 
-cds-sorenson v0.1.2 was released on November 09, 2017.
+cds-sorenson v0.1.3 was released on January 31, 2018.
 
 About
 -----
@@ -17,7 +17,7 @@ What's new
 Installation
 ------------
 
-   $ pip install cds-sorenson==0.1.2
+   $ pip install cds-sorenson==0.1.3
 
 Documentation
 -------------
