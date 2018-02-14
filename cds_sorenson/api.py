@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of CERN Document Server.
-# Copyright (C) 2016, 2017 CERN.
+# Copyright (C) 2016, 2017, 2018 CERN.
 #
 # Invenio is free software; you can redistribute it
 # and/or modify it under the terms of the GNU General Public License as
@@ -206,7 +206,10 @@ def get_preset_id(preset_quality, display_aspect_ratio, max_height=None,
             display_aspect_ratio]
     except KeyError:
         if max_height and max_width:
-            aspect_ratio = get_closest_aspect_ratio(max_height, max_width)
+            display_aspect_ratio = get_closest_aspect_ratio(
+                max_height, max_width)
+            aspect_ratio = current_app.config['CDS_SORENSON_PRESETS'][
+                display_aspect_ratio]
         else:
             raise InvalidAspectRatioError(display_aspect_ratio)
 
