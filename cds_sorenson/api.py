@@ -39,7 +39,7 @@ from .proxies import current_cds_sorenson
 from .utils import _filepath_for_samba, generate_json_for_encoding, get_status
 
 
-def start_encoding(input_file, output_file, preset_quality,
+def start_encoding(input_file, output_file, desired_quality,
                    display_aspect_ratio, max_height=None, max_width=None,
                    **kwargs):
     """Encode a video that is already in the input folder.
@@ -49,7 +49,7 @@ def start_encoding(input_file, output_file, preset_quality,
         the last part "data" is the filename and the last directory is the
         bucket id.
     :param output_file: the file to output the transcoded file.
-    :param preset_quality: quality of the preset.
+    :param desired_quality: desired quality to transcode to.
     :param display_aspect_ratio: the video's aspect ratio
     :param max_height: maximum height we want to encode
     :param max_width: maximum width we want to encode
@@ -59,15 +59,18 @@ def start_encoding(input_file, output_file, preset_quality,
     input_file = _filepath_for_samba(input_file)
     output_file = _filepath_for_samba(output_file)
 
-    current_app.logger.debug('Encoding {0} with preset quality {1}'
-                             .format(input_file, preset_quality))
+    aspect_ratio, preset_config = _get_quality_preset(desired_quality,
+                                                      display_aspect_ratio,
+                                                      video_height=max_height,
+                                                      video_width=max_width)
 
-    preset_id = get_preset_id(preset_quality, display_aspect_ratio,
-                              max_height=max_height, max_width=max_width)
+    current_app.logger.debug(
+        'Transcoding {0} to quality {1} and aspect ratio {2}'.format(
+            input_file, desired_quality, aspect_ratio))
 
     # Build the request of the encoding job
     json_params = generate_json_for_encoding(input_file, output_file,
-                                             preset_id)
+                                             preset_config['preset_id'])
     proxies = current_app.config['CDS_SORENSON_PROXIES']
     headers = {'Accept': 'application/json'}
     response = requests.post(current_app.config['CDS_SORENSON_SUBMIT_URL'],
@@ -78,7 +81,7 @@ def start_encoding(input_file, output_file, preset_quality,
 
     if response.status_code == requests.codes.ok:
         job_id = data.get('JobId')
-        return job_id
+        return job_id, aspect_ratio, preset_config
     else:
         # something is wrong - sorenson server is not responding or the
         # configuration is wrong and we can't contact sorenson server
@@ -135,7 +138,7 @@ def get_encoding_status(job_id):
     raise SorensonError('No status found for job: {0}'.format(job_id))
 
 
-def restart_encoding(job_id, input_file, output_file, preset_quality,
+def restart_encoding(job_id, input_file, output_file, desired_quality,
                      display_aspect_ratio, **kwargs):
     """Try to stop the encoding job and start a new one.
 
@@ -149,11 +152,11 @@ def restart_encoding(job_id, input_file, output_file, preset_quality,
         # If we failed to stop the encoding job, ignore it - in the worst
         # case the encoding will finish and we will overwrite the file.
         pass
-    return start_encoding(input_file, output_file, preset_quality,
+    return start_encoding(input_file, output_file, desired_quality,
                           display_aspect_ratio, **kwargs)
 
 
-def get_available_aspect_ratios(pairs=False):
+def _get_available_aspect_ratios(pairs=False):
     """Return all available aspect ratios.
 
     :param pairs: if True, will return aspect ratios as pairs of integers
@@ -164,18 +167,47 @@ def get_available_aspect_ratios(pairs=False):
     return ratios
 
 
-def get_available_preset_qualities():
-    """Return all available preset qualities."""
+def get_all_distinct_qualities():
+    """Return all distinct available qualities, independently of presets.
+
+    :returns all the qualities without duplications. For example, if presets A
+    has [240p, 360p, 480p] and presets B has [240p, 480p], the result will be
+    [240p, 360p, 480p].
+    """
     # get all possible qualities
     all_qualities = [
         outer_dict.keys()
         for outer_dict in current_app.config['CDS_SORENSON_PRESETS'].values()
     ]
     # remove duplicates while preserving ordering
-    return list(OrderedDict.fromkeys(chain(*all_qualities)))
+    all_distinct_qualities = OrderedDict.fromkeys(chain(*all_qualities))
+    return list(all_distinct_qualities)
 
 
-def get_closest_aspect_ratio(height, width):
+def can_be_transcoded(subformat_desired_quality, video_aspect_ratio,
+                      video_width=None, video_height=None):
+    """Return the details of the subformat that will be generated.
+
+    :param subformat_desired_quality: the quality desired for the subformat
+    :param video_aspect_ratio: the original video aspect ratio
+    :param video_width: the original video width
+    :param video_height: the original video height
+    :returns a dict with aspect ratio, width and height if the subformat can
+    be generated, or False otherwise
+    """
+    try:
+        ar, conf = _get_quality_preset(subformat_desired_quality,
+                                       video_aspect_ratio,
+                                       video_height=video_height,
+                                       video_width=video_width)
+        return dict(quality=subformat_desired_quality, aspect_ratio=ar,
+                    width=conf['width'], height=conf['height'])
+    except (InvalidAspectRatioError, InvalidResolutionError,
+            TooHighResolutionError) as _:
+        return None
+
+
+def _get_closest_aspect_ratio(width, height):
     """Return the closest configured aspect ratio to the given height/width.
 
     :param height: video height
@@ -190,41 +222,38 @@ def get_closest_aspect_ratio(height, width):
     return current_cds_sorenson.aspect_ratio_fractions[closest_fraction]
 
 
-def get_preset_id(preset_quality, display_aspect_ratio, max_height=None,
-                  max_width=None):
-    """Return the preset ID of the requested quality on given aspect ratio.
+def _get_quality_preset(subformat_desired_quality, video_aspect_ratio,
+                        video_height=None, video_width=None):
+    """Return the transcoding config for a given aspect ratio and quality.
 
-    :param preset_quality: the preset quality to use
-    :param display_aspect_ratio: the video's aspect ratio
-    :param max_height: maximum output height for transcoded video
-    :param max_width: maximum output width for transcoded video
-    :returns the corresponding preset ID or `None` if the given aspect ratio
-    does not support this quality
+    :param subformat_desired_quality: the desired quality for transcoding
+    :param video_aspect_ratio: the video's aspect ratio
+    :param video_height: maximum output height for transcoded video
+    :param video_width: maximum output width for transcoded video
+    :returns the transcoding config for a given inputs
     """
     try:
-        aspect_ratio = current_app.config['CDS_SORENSON_PRESETS'][
-            display_aspect_ratio]
+        ar_presets = current_app.config['CDS_SORENSON_PRESETS'][
+            video_aspect_ratio]
     except KeyError:
-        if max_height and max_width:
-            aspect_ratio = get_closest_aspect_ratio(max_height, max_width)
+        if video_height and video_width:
+            video_aspect_ratio = _get_closest_aspect_ratio(video_height,
+                                                           video_width)
+            ar_presets = current_app.config['CDS_SORENSON_PRESETS'][
+                video_aspect_ratio]
         else:
-            raise InvalidAspectRatioError(display_aspect_ratio)
+            raise InvalidAspectRatioError(video_aspect_ratio)
 
     try:
-        preset_quality = aspect_ratio[preset_quality]
+        preset_config = ar_presets[subformat_desired_quality]
     except KeyError:
-        raise InvalidResolutionError(display_aspect_ratio, preset_quality)
+        raise InvalidResolutionError(video_aspect_ratio,
+                                     subformat_desired_quality)
 
-    if (max_height and max_height < preset_quality['height']) or \
-            (max_width and max_width < preset_quality['width']):
-        raise TooHighResolutionError(display_aspect_ratio, max_height,
-                                     max_width, preset_quality['height'],
-                                     preset_quality['width'])
+    if (video_height and video_height < preset_config['height']) or \
+            (video_width and video_width < preset_config['width']):
+        raise TooHighResolutionError(video_aspect_ratio, video_height,
+                                     video_width, preset_config['height'],
+                                     preset_config['width'])
 
-    return preset_quality['preset_id']
-
-
-def get_preset_info(aspect_ratio, preset_quality):
-    """Return technical information about given preset."""
-    return current_app.config['CDS_SORENSON_PRESETS'].get(
-        aspect_ratio, {}).get(preset_quality)
+    return video_aspect_ratio, preset_config

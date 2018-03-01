@@ -237,16 +237,6 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'frame_rate': 15,
             'smil': True,
             'preset_id': '4ee80866-a960-41a7-887d-50041e991300'})])),
-    ('20:9', OrderedDict([
-        ('240p', {
-            'width': 534,
-            'height': 240,
-            'audio_bitrate': 64,
-            'video_bitrate': 316,
-            'total_bitrate': 380,
-            'frame_rate': 15,
-            'smil': True,
-            'preset_id': 'aba0570f-51de-4ad7-9af4-2ece661ddc7f'})])),
     ('256:135', OrderedDict([
         ('360p', {
             'width': 680,
@@ -319,27 +309,6 @@ CDS_SORENSON_PRESETS = OrderedDict([
             'download': True,
             'type': 'ultra hd',
             'preset_id': 'bddf6b9f-c15a-4333-9809-bdb9a244056b'})])),
-    ('64:35', OrderedDict([
-        ('360p', {
-            'width': 658,
-            'height': 360,
-            'audio_bitrate': 64,
-            'video_bitrate': 836,
-            'total_bitrate': 900,
-            'frame_rate': 25,
-            'smil': True,
-            'preset_id': 'a1579abc-ac74-4273-9671-d758cb3c413e'}),
-        ('1080p', {
-            'width': 1976,
-            'height': 1080,
-            'audio_bitrate': 128,
-            'video_bitrate': 5872,
-            'total_bitrate': 6000,
-            'frame_rate': 25,
-            'smil': True,
-            'download': True,
-            'type': 'hd',
-            'preset_id': 'b4426e61-60fc-44ef-8281-8e838a107f8e'})])),
     ('2:1', OrderedDict([
         ('360p', {
             'width': 720,
@@ -445,8 +414,8 @@ CDS_SORENSON_STATUSES = {
 }
 """Statuses returned from Sorenson."""
 
-CDS_SORENSON_SAMBA_DIRECTORY = 'file://cernbox-smb.cern.ch/eoscds/'
+CDS_SORENSON_SAMBA_DIRECTORY = 'file://media-smb.cern.ch/mediacds/'
 """Sorenson's EOS internal mounting point via samba."""
 
-CDS_SORENSON_CDS_DIRECTORY = 'root://eospublic.cern.ch//eos/workspace/c/cds/'
+CDS_SORENSON_CDS_DIRECTORY = 'root://eosmedia.cern.ch//eos/media/cds/'
 """Video base file location in CDS."""
