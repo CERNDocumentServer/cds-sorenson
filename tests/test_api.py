@@ -32,9 +32,9 @@ from flask import Flask
 from mock import MagicMock, patch
 
 from cds_sorenson import CDSSorenson
-from cds_sorenson.api import get_available_aspect_ratios, \
-    get_available_preset_qualities, get_closest_aspect_ratio, \
-    get_encoding_status, get_preset_id, get_preset_info, restart_encoding, \
+from cds_sorenson.api import _get_available_aspect_ratios, \
+    _get_closest_aspect_ratio, _get_quality_preset, can_be_transcoded, \
+    get_all_distinct_qualities, get_encoding_status, restart_encoding, \
     start_encoding, stop_encoding
 from cds_sorenson.error import InvalidAspectRatioError, \
     InvalidResolutionError, SorensonError, TooHighResolutionError
@@ -101,7 +101,7 @@ def test_start_encoding(requests_post_mock, app, start_response):
     sorenson_response.status_code = 200
     requests_post_mock.return_value = sorenson_response
 
-    job_id = start_encoding(filename, '', quality, aspect_ratio)
+    job_id, _, _ = start_encoding(filename, '', quality, aspect_ratio)
     assert job_id == "1234-2345-abcd"
 
     with pytest.raises(TooHighResolutionError):
@@ -170,7 +170,8 @@ def test_restart_encoding(requests_delete_mock, requests_post_mock, app,
     post_response.status_code = 200
     requests_post_mock.return_value = post_response
 
-    job_id = restart_encoding(job_id, filename, '', quality, aspect_ratio)
+    job_id, _, _ = restart_encoding(job_id, filename, '', quality,
+                                    aspect_ratio)
     assert job_id == "1234-2345-abcd"
 
 
@@ -191,68 +192,104 @@ def test_invalid_request(app):
 
 def test_available_aspect_ratios(app):
     """Test `get_available_aspect_ratios` function."""
-    assert get_available_aspect_ratios() == ['16:9', '4:3', '3:2', '20:9',
-                                             '256:135', '64:35', '2:1']
-    assert get_available_aspect_ratios(pairs=True) == [
-        (16, 9), (4, 3), (3, 2), (20, 9), (256, 135), (64, 35), (2, 1)]
+    assert _get_available_aspect_ratios() == ['16:9', '4:3', '3:2', '256:135',
+                                              '2:1']
+    assert _get_available_aspect_ratios(pairs=True) == [
+        (16, 9), (4, 3), (3, 2), (256, 135), (2, 1)]
 
 
 def test_available_preset_qualities(app):
-    """Test `get_available_preset_qualities` function."""
-    assert get_available_preset_qualities() == ['360p', '1080p', '720p',
-                                                '480p', '240p', '2160p',
-                                                '2160ph265', '1080ph265',
-                                                '1024p']
+    """Test `get_all_distinct_qualities` function."""
+    assert sorted(get_all_distinct_qualities()) == sorted(
+        ['240p', '360p', '480p', '720p', '1024p', '1080p', '1080ph265',
+         '2160p', '2160ph265'])
 
 
-def test_get_preset_id(app):
+def test_get_quality_preset(app):
     """Test `get_preset_id` function."""
-    assert get_preset_id('360p',
-                         '16:9') == 'dc2187a3-8f64-4e73-b458-7370a88d92d7'
-    assert get_preset_id('480p',
-                         '2:1') == '120ebe70-1862-4dce-b4fb-6ddfc7b7f364'
+    _, config = _get_quality_preset('360p', '16:9')
+    assert config['preset_id'] == 'dc2187a3-8f64-4e73-b458-7370a88d92d7'
+
+    _, config = _get_quality_preset('480p', '2:1')
+    assert config['preset_id'] == '120ebe70-1862-4dce-b4fb-6ddfc7b7f364'
+
     with pytest.raises(InvalidAspectRatioError):
-        get_preset_id('480p', '27:9')
+        _get_quality_preset('480p', '27:9')
     with pytest.raises(InvalidResolutionError):
-        get_preset_id('480p', '20:9')
+        _get_quality_preset('1080p', '2:1')
     with pytest.raises(TooHighResolutionError):
-        get_preset_id('1080p', '16:9', max_height=720)
+        _get_quality_preset('1080p', '16:9', video_height=720)
     with pytest.raises(TooHighResolutionError):
-        get_preset_id('1080p', '16:9', max_width=1280)
+        _get_quality_preset('1080p', '16:9', video_width=1280)
     with pytest.raises(TooHighResolutionError):
-        get_preset_id('1080p', '16:9', max_height=720, max_width=1280)
-    assert get_preset_id(
-        '720p', '16:9', max_height=720, max_width=1280) is not None
+        _get_quality_preset('1080p', '16:9', video_height=720,
+                            video_width=1280)
+
+    ar, config = _get_quality_preset('720p', '16:9')
+    assert ar == '16:9'
+    assert config is not None
 
 
-def test_get_preset_info(app):
-    """Test `get_preset_info` function."""
+def test_all_get_quality_preset(app):
+    """Test `test_get_quality_preset` function."""
     info_keys = ['width', 'height', 'audio_bitrate', 'video_bitrate',
                  'total_bitrate', 'frame_rate', 'preset_id']
-    for aspect_ratio in get_available_aspect_ratios():
+    for aspect_ratio in _get_available_aspect_ratios():
         for preset_quality in \
                 app.config['CDS_SORENSON_PRESETS'][aspect_ratio].keys():
-            assert all([key in get_preset_info(aspect_ratio, preset_quality)
-                        for key in info_keys])
+            _, config = _get_quality_preset(preset_quality, aspect_ratio)
+            assert all([key in config for key in info_keys])
+
+
+def test_can_be_transcoded(app):
+    """Test `test_can_be_transcoded` function."""
+    # standard case
+    result = can_be_transcoded('360p', '16:9')
+    assert result['quality'] == '360p'
+    assert result['aspect_ratio'] == '16:9'
+    assert result['width'] == 640
+    assert result['height'] == 360
+
+    # aspect ratio fallback
+    result = can_be_transcoded('720p', '5:4', 1024, 768)
+    assert result['quality'] == '720p'
+    assert result['aspect_ratio'] == '4:3'
+    assert result['width'] == 960
+    assert result['height'] == 720
+
+    # no transcoding
+    assert not can_be_transcoded('720p', '5:4')
+    assert not can_be_transcoded('720p', '5:4', 480, 360)
 
 
 def test_no_smil_config_option(app):
     """Test that some formats should not be added to the SMIL file."""
-    assert not get_preset_info('16:9', '1080ph265').get('smil')
-    assert get_preset_info('16:9', '1080p').get('smil')
+    _, config = _get_quality_preset('1080ph265', '16:9')
+    assert not config.get('smil')
+
+    _, config = _get_quality_preset('1080p', '16:9')
+    assert config.get('smil')
 
 
 def test_get_closest_aspect_ratio(app):
     """Test aspect ratio fallback for unknown aspect ratios."""
     # not configured aspect ratios
     # 11:9
-    assert get_closest_aspect_ratio(288, 352) == '4:3'
+    assert _get_closest_aspect_ratio(352, 288) == '4:3'
     # 25:14
-    assert get_closest_aspect_ratio(224, 400) == '16:9'
+    assert _get_closest_aspect_ratio(400, 224) == '16:9'
     # 5:4
-    assert get_closest_aspect_ratio(576, 720) == '4:3'
-    assert get_closest_aspect_ratio(320, 400) == '4:3'
-    assert get_closest_aspect_ratio(288, 360) == '4:3'
-    assert get_closest_aspect_ratio(256, 320) == '4:3'
+    assert _get_closest_aspect_ratio(720, 576) == '4:3'
+    assert _get_closest_aspect_ratio(400, 320) == '4:3'
+    assert _get_closest_aspect_ratio(360, 288) == '4:3'
+    assert _get_closest_aspect_ratio(320, 256) == '4:3'
     # 40:27
-    assert get_closest_aspect_ratio(486, 720) == '3:2'
+    assert _get_closest_aspect_ratio(720, 486) == '3:2'
+    # 20:9
+    assert _get_closest_aspect_ratio(600, 270) == '2:1'
+    # 64:35
+    assert _get_closest_aspect_ratio(4096, 2240) == '16:9'
+    # 295:162
+    assert _get_closest_aspect_ratio(720, 395) == '16:9'
+    # 295:216
+    assert _get_closest_aspect_ratio(720, 527) == '4:3'
