@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of CERN Document Server.
-# Copyright (C) 2016 CERN.
+# Copyright (C) 2016, 2018 CERN.
 #
 # Invenio is free software; you can redistribute it
 # and/or modify it under the terms of the GNU General Public License as
@@ -32,12 +32,12 @@ from flask import Flask
 from mock import MagicMock, patch
 
 from cds_sorenson import CDSSorenson
-from cds_sorenson.api import _get_available_aspect_ratios, \
-    _get_closest_aspect_ratio, _get_quality_preset, can_be_transcoded, \
-    get_all_distinct_qualities, get_encoding_status, restart_encoding, \
-    start_encoding, stop_encoding
+from cds_sorenson.api import can_be_transcoded, get_all_distinct_qualities, \
+    get_encoding_status, restart_encoding, start_encoding, stop_encoding
 from cds_sorenson.error import InvalidAspectRatioError, \
     InvalidResolutionError, SorensonError, TooHighResolutionError
+from cds_sorenson.legacy_api import _get_available_aspect_ratios, \
+    _get_closest_aspect_ratio, _get_quality_preset
 
 
 class MockRequests(object):
@@ -87,7 +87,7 @@ def test_init():
     assert 'cds-sorenson' in app.extensions
 
 
-@patch('cds_sorenson.api.requests.post')
+@patch('cds_sorenson.legacy_api.requests.post')
 def test_start_encoding(requests_post_mock, app, start_response):
     """Test if starting encoding works."""
     filename = 'file://cernbox-smb.cern.ch/eoscds/test/sorenson_input/' \
@@ -108,7 +108,7 @@ def test_start_encoding(requests_post_mock, app, start_response):
         start_encoding(filename, '', quality, aspect_ratio, max_height=240)
 
 
-@patch('cds_sorenson.api.requests.get')
+@patch('cds_sorenson.legacy_api.requests.get')
 def test_encoding_status(requests_get_mock, app, running_job_status_response):
     """Test if getting encoding status works."""
     job_id = "1234-2345-abcd"
@@ -123,7 +123,7 @@ def test_encoding_status(requests_get_mock, app, running_job_status_response):
     assert encoding_status == ('Hold', 55.810001373291016)
 
 
-@patch('cds_sorenson.api.requests.delete')
+@patch('cds_sorenson.legacy_api.requests.delete')
 def test_stop_encoding(requests_delete_mock, app):
     """Test if stopping encoding works."""
     job_id = "1234-2345-abcd"
@@ -138,7 +138,7 @@ def test_stop_encoding(requests_delete_mock, app):
     assert returned_value is None
 
 
-@patch('cds_sorenson.api.requests', MockRequests)
+@patch('cds_sorenson.legacy_api.requests', MockRequests)
 def test_stop_encoding_twice_fails(app):
     """Test if stopping the same job twice fails."""
     job_id = "1234-2345-abcd"
@@ -150,8 +150,8 @@ def test_stop_encoding_twice_fails(app):
         stop_encoding(job_id)
 
 
-@patch('cds_sorenson.api.requests.post')
-@patch('cds_sorenson.api.requests.delete')
+@patch('cds_sorenson.legacy_api.requests.post')
+@patch('cds_sorenson.legacy_api.requests.delete')
 def test_restart_encoding(requests_delete_mock, requests_post_mock, app,
                           start_response):
     """Test if restarting encoding works."""
