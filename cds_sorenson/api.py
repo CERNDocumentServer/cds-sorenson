@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of CERN Document Server.
-# Copyright (C) 2016, 2017 CERN.
+# Copyright (C) 2016, 2017, 2018 CERN.
 #
 # Invenio is free software; you can redistribute it
 # and/or modify it under the terms of the GNU General Public License as
@@ -232,6 +232,9 @@ def _get_quality_preset(subformat_desired_quality, video_aspect_ratio,
     :param video_width: maximum output width for transcoded video
     :returns the transcoding config for a given inputs
     """
+    # For old videos with really low quality, better to encode lowest always
+    _LOWEST_WIDTH = 320
+    _LOWEST_HEIGHT = 240
     try:
         ar_presets = current_app.config['CDS_SORENSON_PRESETS'][
             video_aspect_ratio]
@@ -249,6 +252,13 @@ def _get_quality_preset(subformat_desired_quality, video_aspect_ratio,
     except KeyError:
         raise InvalidResolutionError(video_aspect_ratio,
                                      subformat_desired_quality)
+
+    if video_width:
+        video_width = video_width \
+                      if video_width >= _LOWEST_WIDTH else _LOWEST_WIDTH
+    if video_height:
+        video_height = video_height \
+                       if video_height >= _LOWEST_HEIGHT else _LOWEST_HEIGHT
 
     if (video_height and video_height < preset_config['height']) or \
             (video_width and video_width < preset_config['width']):
