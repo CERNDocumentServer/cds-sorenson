@@ -52,6 +52,8 @@ before_install:
 install:
   - "travis_retry pip install -r .travis-${REQUIREMENTS}-requirements.txt"
   - "travis_retry pip install -e .[all]"
+  # TODO: remove after integration
+  - "travis_retry pip install git+https://github.com/inveniosoftware/invenio-files-rest@cds-object-version-tags"
 
 script:
   - "./run-tests.sh"

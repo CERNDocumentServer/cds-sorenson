@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of CERN Document Server.
-# Copyright (C) 2016, 2017 CERN.
+# Copyright (C) 2016, 2017, 2018 CERN.
 #
 # Invenio is free software; you can redistribute it
 # and/or modify it under the terms of the GNU General Public License as
@@ -53,7 +53,30 @@ CDS_SORENSON_ARCHIVE_JOBS_STATUS_URL = \
 """Sorenson endpoint for getting the status of an archived (done) job."""
 
 CDS_SORENSON_DEFAULT_QUEUE = '064153dd-ade2-4824-8458-88e6ea03d395'
-"""Default queue for all transcoding jobs."""
+"""Default queue for all transcoding jobs. (Legacy API)"""
+
+CDS_SORENSON_FAST_PRESET = '720p'
+"""Fast preset, first one to get available after publish.
+
+This preset quality will go to a particular queue which is supposed to be
+higher priority.
+"""
+
+CDS_SORENSON_BIG_FILE_THRESHOLD = 21474836480  # 20 Gb
+"""Size after which a file is consider big.
+
+Sorenson machines are heterogeneous, two machines have a big disk (1Tb) and the
+other two only 200Gb. If the file is bigger than 20Gb, and for security, it
+will be consider as a big file and should be dealt with by the machines with
+bigger disks.
+"""
+
+CDS_SORENSON_QUEUES = {
+    'default': '88b51dfc-fa33-4d0e-8ea0-934fc31dc4a2',
+    'big_files': '064153dd-ade2-4824-8458-88e6ea03d395',
+    'fast': '1ebcf592-0a17-42b8-a949-f1768935eadd',
+}
+"""Sorenson queues."""
 
 CDS_SORENSON_PRESETS = OrderedDict([
     ('16:9', OrderedDict([
@@ -370,9 +393,6 @@ download: specifies if this file should be shown in the list of downloadable
     formats, by default is set to ``False``.
 """
 
-CDS_SORENSON_NAME_GENERATOR = 'cds_sorenson.utils.name_generator'
-"""Generator for output file names."""
-
 CDS_SORENSON_PROXIES = {}
 """Proxies to connect to Sorenson, quite useful for testing.
 
@@ -412,7 +432,7 @@ CDS_SORENSON_STATUSES = {
     9: 'Hold',
     10: 'Incomplete',
 }
-"""Statuses returned from Sorenson."""
+"""Statuses returned from Sorenson. (Legacy API)"""
 
 CDS_SORENSON_SAMBA_DIRECTORY = 'file://media-smb.cern.ch/mediacds/'
 """Sorenson's EOS internal mounting point via samba."""

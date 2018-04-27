@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # This file is part of CERN Document Server.
-# Copyright (C) 2016, 2017 CERN.
+# Copyright (C) 2018 CERN.
 #
 # Invenio is free software; you can redistribute it
 # and/or modify it under the terms of the GNU General Public License as
@@ -21,239 +21,622 @@
 # In applying this license, CERN does not
 # waive the privileges and immunities granted to it by virtue of its status
 # as an Intergovernmental Organization or submit itself to any jurisdiction.
-
-"""API to use Sorenson transcoding server."""
-
-from __future__ import absolute_import, print_function
+"""Invenio-Videos API implementation for use Sorenson and FFMPG."""
 
 import json
-from collections import OrderedDict
-from itertools import chain
+import logging
+import os
+import tempfile
+import time
+from enum import Enum
+from random import randint
 
 import requests
 from flask import current_app
+from flask_iiif.utils import create_gif_from_frames
+from invenio_db import db
+from invenio_files_rest.models import FileInstance, ObjectVersion, \
+    ObjectVersionTag, as_object_version
 
-from .error import InvalidAspectRatioError, InvalidResolutionError, \
-    SorensonError, TooHighResolutionError
-from .proxies import current_cds_sorenson
-from .utils import _filepath_for_samba, generate_json_for_encoding, get_status
-
-
-def start_encoding(input_file, output_file, desired_quality,
-                   display_aspect_ratio, max_height=None, max_width=None,
-                   **kwargs):
-    """Encode a video that is already in the input folder.
-
-    :param input_file: string with the filename, something like
-        /eos/cds/test/sorenson/8f/m2/728-jsod98-8s9df2-89fg-lksdjf/data where
-        the last part "data" is the filename and the last directory is the
-        bucket id.
-    :param output_file: the file to output the transcoded file.
-    :param desired_quality: desired quality to transcode to.
-    :param display_aspect_ratio: the video's aspect ratio
-    :param max_height: maximum height we want to encode
-    :param max_width: maximum width we want to encode
-    :param kwargs: other technical metadata
-    :returns: job ID.
-    """
-    input_file = _filepath_for_samba(input_file)
-    output_file = _filepath_for_samba(output_file)
-
-    aspect_ratio, preset_config = _get_quality_preset(desired_quality,
-                                                      display_aspect_ratio,
-                                                      video_height=max_height,
-                                                      video_width=max_width)
-
-    current_app.logger.debug(
-        'Transcoding {0} to quality {1} and aspect ratio {2}'.format(
-            input_file, desired_quality, aspect_ratio))
-
-    # Build the request of the encoding job
-    json_params = generate_json_for_encoding(input_file, output_file,
-                                             preset_config['preset_id'])
-    proxies = current_app.config['CDS_SORENSON_PROXIES']
-    headers = {'Accept': 'application/json'}
-    response = requests.post(current_app.config['CDS_SORENSON_SUBMIT_URL'],
-                             headers=headers, json=json_params,
-                             proxies=proxies)
-
-    data = json.loads(response.text)
-
-    if response.status_code == requests.codes.ok:
-        job_id = data.get('JobId')
-        return job_id, aspect_ratio, preset_config
-    else:
-        # something is wrong - sorenson server is not responding or the
-        # configuration is wrong and we can't contact sorenson server
-        raise SorensonError("{0}: {1}".format(response.status_code,
-                                              response.text))
+from .error import SorensonError
+from .legacy_api import can_be_transcoded, get_all_distinct_qualities, \
+    get_encoding_status, restart_encoding, start_encoding, stop_encoding
+from .utils import cleanup_after_failure, eos_fuse_fail_safe, \
+    filepath_for_samba, run_ffmpeg_command
 
 
-def stop_encoding(job_id):
-    """Stop encoding job.
+class VideoMixing(object):
+    """Mixing for video processing."""
 
-    :param job_id: string with the job ID.
-    :returns: None.
-    """
-    delete_url = (current_app.config['CDS_SORENSON_DELETE_URL']
-                             .format(job_id=job_id))
-    headers = {'Accept': 'application/json'}
-    proxies = current_app.config['CDS_SORENSON_PROXIES']
+    def __init__(self, video_object_version, *args, **kwargs):
+        """Initialize Video object.
 
-    response = requests.delete(delete_url, headers=headers, proxies=proxies)
-    if response.status_code != requests.codes.ok:
-        raise SorensonError("{0}: {1}".format(response.status_code,
-                                              response.text))
+        :param video_object_version: Original video Invenio ObjectVersion,
+        either the object or the UUID.
+        :param kwargs:
+          - extracted_metadata:
+          - presets:
+        """
+        self.video = as_object_version(video_object_version)
+        self._extracted_metadta = kwargs.get('extracted_metadta', {})
+        self._presets = kwargs.get('presets', [])
+
+    @property
+    def presets(self):
+        """Get the details of all the presets that are available for the video.
+
+        :return: Dictionary with the details of each of the reset grouped by
+        preset name. The content of dictionary depends on configuration of each
+        video class content, your consumer app should be aware of that..
+        """
+        raise NotImplemented()
+
+    def extract_metadata(self,
+                         process_output_callback=None,
+                         attach_to_video=False,
+                         *args,
+                         **kwargs):
+        """Extract all the video metadata from the output of ffprobe.
+
+        :param process_output_callback: function to process the ffprobe output,
+        takes a dictionary and returns a dictionary.
+        :param attach_to_video: If set to True the extracted metadata will be
+        attached to the video `ObjectVersion` as `ObjectVersionTag` after
+        running the `process_output_callback`. The `ObjectVersionTag` storage
+        is key value base, where the value can be stringify into the database,
+        keep this in mind when setting this value to true.
+        :return: Dictionary with the extracted metadata.
+        """
+        raise NotImplemented()
+
+    def create_thumbnails(self,
+                          start=5,
+                          end=95,
+                          step=10,
+                          progress_callback=None,
+                          *args,
+                          **kwargs):
+        """Create thumbnail files.
+
+        :param start: percentage to start extracting frames. Default 5.
+        :param end: percentage to finish extracting frames. Default 95.
+        :param step: percentage between frames. Default 10.
+        :param progress_callback: function to report progress, takes an integer
+        showing percentage of progress, a string with a message and a
+        dictionary with more information.
+        :return: List of `ObjectVersion` with the thumbnails.
+        """
+        raise NotImplemented()
+
+    def create_gif_from_frames(self):
+        """Create a gif file with the extracted frames.
+
+        `create_thumbnail` needs to be run first, if there are not frames it
+        will raise.
+        """
+        raise NotImplemented()
+
+    def encode(self, preset_quality, callback_function=None, *args, **kwargs):
+        """Encode the video using a preset.
+
+        :param preset_quality: Name of the quality to encode the video with.
+        If the preset does not apply to the current video raises.
+        :param callback_function: function to report progress, takes and
+        integer showing the percentage of the progress, a string with a message
+        and a dictionary with mote information.
+        :return: Dictionary containing the information of the encoding job.
+        """
+        raise NotImplemented()
+
+    @staticmethod
+    def stop_encoding_job(job_id, *ars, **kwargs):
+        """Stop encoding.
+
+        :param job_id: ID of the job to stop.
+        """
+        raise NotImplemented()
+
+    @staticmethod
+    def get_job_status(job_id):
+        """Get status of a give job.
+
+        :param job_id: ID of the job to track the status.
+        :return: Tuple with an integer showing the percentage of
+        the process, a string with a message and a dictionary with more
+        information (perhaps `None`)
+        """
+        raise NotImplemented()
 
 
-def get_encoding_status(job_id):
-    """Get status of a given job from the Sorenson server.
+class SorensonStatus(Enum):
+    """Sorenson status mapping."""
 
-    If the job can't be found in the current queue, it's probably done, so we
-    check the archival queue.
+    PENDING = 'PENDING'
+    """Not yet running."""
 
-    :param job_id: string with the job ID.
-    :returns: tuple with the status message and progress in %.
-    """
-    status = get_status(job_id)
-    if status == '':
-        # encoding job was canceled
-        return "Canceled", 100
-    status_json = json.loads(status)
-    # there are different ways to get the status of a job, depending if
-    # the job was successful, so we should check for the status code in
-    # different places
-    job_status = status_json.get('Status', {}).get('Status')
-    job_progress = status_json.get('Status', {}).get('Progress')
-    if job_status:
-        return current_app.config['CDS_SORENSON_STATUSES'].get(job_status), \
-            job_progress
-    # status not found? check in different place
-    job_status = status_json.get('StatusStateId')
-    if job_status:
-        # job is probably either finished or failed, so the progress will
-        # always be 100% in this case
-        return current_app.config['CDS_SORENSON_STATUSES'].get(job_status), 100
-    # No status was found (which shouldn't happen)
-    raise SorensonError('No status found for job: {0}'.format(job_id))
+    STARTED = 'STARTED'
+    """Running."""
+
+    SUCCESS = 'SUCCESS'
+    """Done."""
+
+    FAILURE = 'FAILURE'
+    """Error."""
+
+    REVOKED = 'REVOKED'
+    """Canceled."""
+
+    @staticmethod
+    def to_sorenson_status(response_status):
+        """Convert Sorenson's status into something meaningful."""
+        status_map = {
+            0: (SorensonStatus.PENDING, 0),  # Undefined
+            1: (SorensonStatus.PENDING, 0),  # Waiting
+            2: (SorensonStatus.STARTED, 0.33),  # Downloading
+            3: (SorensonStatus.STARTED, 0.66),  # Transcoding
+            4: (SorensonStatus.STARTED, 0.99),  # Uploading
+            5: (SorensonStatus.SUCCESS, 1),  # Finished
+            6: (SorensonStatus.FAILURE, 0),  # Error
+            7: (SorensonStatus.REVOKED, 0),  # Canceled
+            8: (SorensonStatus.FAILURE, 0),  # Deleted
+            9: (SorensonStatus.PENDING, 0),  # Hold
+            10: (SorensonStatus.FAILURE, 0),  # Incomplete
+        }
+        return status_map[response_status]
 
 
-def restart_encoding(job_id, input_file, output_file, desired_quality,
-                     display_aspect_ratio, **kwargs):
-    """Try to stop the encoding job and start a new one.
+class CDSVideo(VideoMixing):
+    """Soreson/FFMPG Video implementation."""
 
-    It's impossible to get the input_file and preset_quality from the
-    job_id, if the job has not yet finished, so we need to specify all
-    parameters for stopping and starting the encoding job.
-    """
-    try:
-        stop_encoding(job_id)
-    except SorensonError:
-        # If we failed to stop the encoding job, ignore it - in the worst
-        # case the encoding will finish and we will overwrite the file.
+    @property
+    def duration(self):
+        """Video duration in seconds (float) from extracted metadata."""
+        return self.extracted_metadata['duration']
+
+    @property
+    def aspect_ratio(self):
+        """Video aspect ratio from extracted metadata."""
+        return self.extracted_metadata['display_aspect_ratio']
+
+    @property
+    def height(self):
+        """Video height from extracted metadata."""
+        return self.extracted_metadata['height']
+
+    @property
+    def width(self):
+        """Video width from extracted metadata."""
+        return self.extracted_metadata['width']
+
+    @property
+    def thumbnails(self):
+        """List with all the video thumbnail if created."""
         pass
-    return start_encoding(input_file, output_file, desired_quality,
-                          display_aspect_ratio, **kwargs)
 
+    @property
+    def _sorenson_aspect_ratio(self):
+        """Closest aspect ratio inside Soreonson preset configuration."""
+        fractions_with_ar = {}
+        for ar in current_app.config['CDS_SORENSON_PRESETS']:
+            sorenson_w, sorenson_h = ar.split(':')
+            sorenson_ar_fraction = float(sorenson_w) / float(sorenson_h)
+            fractions_with_ar.setdefault(sorenson_ar_fraction, ar)
+        # calculate the aspect ratio fraction
+        unknown_ar_fraction = float(self.width) / self.height
+        closest_fraction = min(
+            fractions_with_ar.keys(),
+            key=lambda x: abs(x - unknown_ar_fraction))
+        return fractions_with_ar[closest_fraction]
 
-def _get_available_aspect_ratios(pairs=False):
-    """Return all available aspect ratios.
+    @property
+    def _sorenson_height(self):
+        """Video height or minimum height from Sorenson presets if smaller."""
+        minimun_height = None
+        for name, info in current_app.config['CDS_SORENSON_PRESETS'][
+                self._soreson_aspect_ratio]:
+            if not minimun_height or minimun_height > info['height']:
+                minimun_height = info['height']
 
-    :param pairs: if True, will return aspect ratios as pairs of integers
-    """
-    ratios = [key for key in current_app.config['CDS_SORENSON_PRESETS']]
-    if pairs:
-        ratios = [tuple(map(int, ratio.split(':', 1))) for ratio in ratios]
-    return ratios
+        return self.height if self.heigh > minimun_height else minimun_height
 
+    @property
+    def _sorenson_width(self):
+        """Video width or minimum width from Sorenson presets if smaller."""
+        minimun_width = None
+        for name, info in current_app.config['CDS_SORENSON_PRESETS'][
+                self._soreson_aspect_ratio]:
+            if not minimun_width or minimun_width > info['width']:
+                minimun_width = info['width']
 
-def get_all_distinct_qualities():
-    """Return all distinct available qualities, independently of presets.
+        return self.width if self.heigh > minimun_width else minimun_width
 
-    :returns all the qualities without duplications. For example, if presets A
-    has [240p, 360p, 480p] and presets B has [240p, 480p], the result will be
-    [240p, 360p, 480p].
-    """
-    # get all possible qualities
-    all_qualities = [
-        outer_dict.keys()
-        for outer_dict in current_app.config['CDS_SORENSON_PRESETS'].values()
-    ]
-    # remove duplicates while preserving ordering
-    all_distinct_qualities = OrderedDict.fromkeys(chain(*all_qualities))
-    return list(all_distinct_qualities)
+    @property
+    def extracted_metadata(self):
+        """Get video metadata.
 
+        If the metadata is not cached in the object it will call
+        `extract_metadata` with `attach_to_video=False` parameter.
+        """
+        # TODO: perhaps we could read from DB the tags?
+        if not self._extracted_metadta:
+            self._extracted_metadta = self.extract_metadata(
+                attach_to_video=False)
+        return self._extracted_metadta
 
-def can_be_transcoded(subformat_desired_quality, video_aspect_ratio,
-                      video_width=None, video_height=None):
-    """Return the details of the subformat that will be generated.
+    @property
+    def presets(self):
+        """Return all the presets available for the current video.
 
-    :param subformat_desired_quality: the quality desired for the subformat
-    :param video_aspect_ratio: the original video aspect ratio
-    :param video_width: the original video width
-    :param video_height: the original video height
-    :returns a dict with aspect ratio, width and height if the subformat can
-    be generated, or False otherwise
-    """
-    try:
-        ar, conf = _get_quality_preset(subformat_desired_quality,
-                                       video_aspect_ratio,
-                                       video_height=video_height,
-                                       video_width=video_width)
-        return dict(quality=subformat_desired_quality, aspect_ratio=ar,
-                    width=conf['width'], height=conf['height'])
-    except (InvalidAspectRatioError, InvalidResolutionError,
-            TooHighResolutionError) as _:
-        return None
+        :return: List of dictionaries
+        """
+        if self._presets:
+            return self._presets
 
+        preset_config = current_app.config['CDS_SORENSON_PRESETS']
+        all_presets = preset_config[self._sorenson_aspect_ratio]
 
-def _get_closest_aspect_ratio(width, height):
-    """Return the closest configured aspect ratio to the given height/width.
+        # Filter presets base on width and height of the video
+        self._presets = dict()
+        for name, preset_info in all_presets.iteritems():
+            if self._sorenson_height < preset_info['hight'] or \
+                   self._sorenson_width < preset_info['width']:
+                # Preset to big for the video file
+                continue
+            # Add name inside for convenience, I am lazy!
+            preset_info['name'] = name
+            self._presets[name] = preset_info
 
-    :param height: video height
-    :param width: video width
-    """
-    # calculate the aspect ratio fraction
-    unknown_ar_fraction = float(width) / height
+        return self._presets
 
-    # find the closest aspect ratio fraction to the unknown
-    closest_fraction = min(current_cds_sorenson.aspect_ratio_fractions.keys(),
-                           key=lambda x: abs(x - unknown_ar_fraction))
-    return current_cds_sorenson.aspect_ratio_fractions[closest_fraction]
+    def _sorenson_queue(self, preset_quality):
+        """Given file size and preset quality decide which queue to use."""
+        sorenson_queues = current_app.config['CDS_SORENSON_QUEUES']
+        size_threshold = current_app.config['CDS_SORENSON_BIG_FILE_THRESHOLD']
+        flast_preset = current_app.config['CDS_SORENSON_FAST_PRESET']
 
+        if preset_quality == fast_preset:
+            return sorenson_queues['fast']
 
-def _get_quality_preset(subformat_desired_quality, video_aspect_ratio,
-                        video_height=None, video_width=None):
-    """Return the transcoding config for a given aspect ratio and quality.
-
-    :param subformat_desired_quality: the desired quality for transcoding
-    :param video_aspect_ratio: the video's aspect ratio
-    :param video_height: maximum output height for transcoded video
-    :param video_width: maximum output width for transcoded video
-    :returns the transcoding config for a given inputs
-    """
-    try:
-        ar_presets = current_app.config['CDS_SORENSON_PRESETS'][
-            video_aspect_ratio]
-    except KeyError:
-        if video_height and video_width:
-            video_aspect_ratio = _get_closest_aspect_ratio(video_height,
-                                                           video_width)
-            ar_presets = current_app.config['CDS_SORENSON_PRESETS'][
-                video_aspect_ratio]
+        if self.video.file.size > size_threshold:
+            return sorenson_queues['big_files']
         else:
-            raise InvalidAspectRatioError(video_aspect_ratio)
+            return sorenson_queues['default']
 
-    try:
-        preset_config = ar_presets[subformat_desired_quality]
-    except KeyError:
-        raise InvalidResolutionError(video_aspect_ratio,
-                                     subformat_desired_quality)
+    def _build_subformat_key(preset_info):
+        """Return the key for a subformat based on the preset_info."""
+        return '{0}.mp4'.format(preset_info['name'])
 
-    if (video_height and video_height < preset_config['height']) or \
-            (video_width and video_width < preset_config['width']):
-        raise TooHighResolutionError(video_aspect_ratio, video_height,
-                                     video_width, preset_config['height'],
-                                     preset_config['width'])
+    @staticmethod
+    def _clean_file_name(uri):
+        """Remove the .mp4 file extension from file name.
 
-    return video_aspect_ratio, preset_config
+        For some reason the Sorenson Server adds the extension to the output
+        file, creating ``data.mp4``. Our file storage does not use extensions
+        and this is causing troubles.
+        The best/dirtiest solution is to remove the file extension once the
+        transcoded file is created.
+        """
+        real_path = '{0}.mp4'.format(uri)
+        # Don't judge me for this :)
+        fs = get_pyfs(real_path)._get_fs(False)[0]
+        fs.move(real_path, uri)
+
+    def generate_request_body(self, input_file, output_file, preset_info):
+        """Generate JSON to be sent to Sorenson server to start encoding."""
+        return dict(
+            Name='CDS File:{0} Preset:{1}'.format(self.video.version_id,
+                                                  preset_info['name']),
+            QueueId=self._sorenson_queue(preset_info['name']),
+            JobMediaInfo=dict(
+                SourceMediaList=[
+                    dict(
+                        FileUri=input_file,
+                        UserName=current_app.config['CDS_SORENSON_USERNAME'],
+                        Password=current_app.config['CDS_SORENSON_PASSWORD'],
+                    )
+                ],
+                DestinationList=[dict(FileUri=output_file)],
+                CompressionPresetList=[
+                    dict(PresetId=preset_info['preset_id'])
+                ],
+            ),
+        )
+
+    @eos_fuse_fail_safe
+    def extract_metadata(self, attach_to_video=True, *args, **kwargs):
+        """Use FFMPG to extract all video metadata."""
+        cmd = ('ffprobe -v quiet -show_format -print_format json '
+               '-show_streams -select_streams v:0 {input_file}'.format(kwargs))
+        self._extracted_metadata = run_ffmpeg_command(cmd).decode('utf-8')
+        if not self._extracted_metadata:
+            # TODO: perhaps we want to try a different command, i.e. avi files
+            raise RuntimeError('No metadata extracted for {0}'.format(
+                self.video))
+
+        process_output_callback = kwargs.get['process_output_callback'] or \
+            default_extract_metadata_callback
+        self._extracted_metadata = process_output_callback(
+            self._extracted_metadata)
+
+        if attach_to_video:
+            for key, value in self._extracted_metadata.iteritems():
+                ObjectVersionTag.create_or_update(self.video, key, value)
+
+        return self._extracted_metadata
+
+    @eos_fuse_fail_safe
+    def create_thumbnails(self,
+                          start=5,
+                          end=95,
+                          step=10,
+                          progress_callback=None,
+                          create_gif=True,
+                          *args,
+                          **kwargs):
+        """Use FFMPEG to create thumbnail files."""
+        duration = float(self.duration)
+        step_time = duration * step / 100
+        start_time = duration * start / 100
+        end_time = (duration * end / 100) + 0.01  # FIXME WDF?
+
+        number_of_thumbnails = ((end - start) / step) + 1
+
+        assert all([
+            0 < start_time < duration,
+            0 < end_time < duration,
+            0 < step_time < duration,
+            start_time < end_time,
+            (end_time - start_time) % step_time < 0.05  # FIXME WDF?
+        ])
+
+        thumbnail_name = current_app.config.get(
+            'VIDEO_THUMBNAIL_NAME_TEMPLATE', 'frame-{0:d}.jpg')
+        # Iterate over requested timestamps
+        objs = []
+        for i, timestamp in enumerate(range(start_time, end_time, step_time)):
+            with tempfile.TemporaryDirectory() as o:
+                # TODO: can we write for the final location like encode?
+                output_file = os.path.join(o, thumbnail_name)
+                # Construct ffmpeg command
+                cmd = ('ffmpeg -accurate_seek -ss {timestamp} -i {input_file}'
+                       ' -vframes 1 {output_file} -qscale:v 1').format(
+                           timestamp=timestamp,
+                           output_file=output_file,
+                           **kwargs)
+
+                # Run ffmpeg command
+                run_ffmpeg_command(cmd)
+
+                # Create ObjectVersion out of the tmp file
+                with db.session.being_nested(), open(output_file) as f:
+                    obj = ObjectVersion.create(
+                        bucket=self.video.bucket,
+                        key=thumbnail_name,
+                        stream=f,
+                        size=os.path.getsize(output_file))
+                    ObjectVersionTag.create(obj, 'master', str(
+                        self.video.version_id))
+                    ObjectVersionTag.create(obj, 'media_type', 'image')
+                    ObjectVersionTag.create(obj, 'context_type', 'thumbnail')
+                    ObjectVersionTag.create(obj, 'content_type', 'jpg')
+                    ObjectVersionTag.create(obj, 'timestamp',
+                                            start_time + (i + 1) * step_time)
+                    objs.append(obj)
+                db.session.commit()
+
+            # Report progress
+            if progress_callback:
+                progress_callback(number_of_thumbnails / i + 1)
+
+        if create_gif:
+            objs.append(self.create_gif(
+                progress_callback=progres_callback, *args, **kwargs))
+        return objs
+
+    def create_gif(self, progress_callback=None, *args, **kwargs):
+        """Use IIIF to create a GIF from the extracted frames."""
+        images = []
+        for frame in self.thumbnails:
+            image = Image.open(file_opener_xrootd(f, 'rb'))
+            # Convert image for better quality
+            im = image.convert('RGB').convert(
+                'P', palette=Image.ADAPTIVE, colors=255
+            )
+            images.append(im)
+
+        if not images:
+            # Most likely there are no thumbnails
+            raise RuntimeError(
+                'Before creating a gif you need to extract the thumbnails!')
+
+        gif_image = create_gif_from_frames(images)
+
+        gif_name = current_app.config.get('VIDEO_GIF_NAME', 'frames.gif')
+        with db.session.begin_nested(), tempfile.TemporaryDirectory() as o:
+            output_file = os.path.join(o, gif_name)
+            gif_image.save(output_file, save_all=True)
+            obj = ObjectVersion.create(
+                bucket=self.video.bucket,
+                key=git_name,
+                stream=open(output_file),
+                size=os.path.getsize(output_file))
+            ObjectVersionTag.create(obj, 'master', str(
+                self.video.version_id))
+            ObjectVersionTag.create(obj, 'media_type', 'image')
+            ObjectVersionTag.create(obj, 'context_type', 'preview')
+            ObjectVersionTag.create(obj, 'content_type', 'gif')
+        db.session.commit()
+
+        return obj
+
+    def encode(self, preset_quality, callback_function=None, *args, **kwargs):
+        """Enconde a video."""
+        preset_info = self.presets.get(preset_quality)
+        assert preset_info, 'Unknown preset'
+
+        with db.session.begin_nested():
+            # Create FileInstance
+            file_instance = FileInstance.create()
+
+            # Create ObjectVersion
+            obj_key = self._build_subformat_key(preset_info)
+            obj = ObjectVersion.create(bucket=self.video.bucket, key=obj_key)
+
+            # Extract new location
+            bucket_location = self.video.bucket.location
+            storage = file_instance.storage(default_location=bucket_location)
+            directory, filename = storage._get_fs()
+
+            # XRootDPyFS doesn't implement root_path
+            try:
+                # XRootD Safe
+                output_file = os.path.join(directory.root_url,
+                                           directory.base_path, filename)
+            except AttributeError:
+                output_file = os.path.join(directory.root_path, filename)
+
+            input_file = filepath_for_samba(self.video)
+
+            # Build the request of the encoding job
+            json_params = self.generate_request_body(input_file, output_file,
+                                                     preset_info)
+            proxies = current_app.config['CDS_SORENSON_PROXIES']
+            headers = {'Accept': 'application/json'}
+            logging.debug('Sending job to Sorenson {0}'.format(json_params))
+            response = requests.post(
+                current_app.config['CDS_SORENSON_SUBMIT_URL'],
+                headers=headers,
+                json=json_params,
+                proxies=proxies)
+
+            if response.status_code != requests.codes.ok:
+                # something is wrong - sorenson server is not responding or the
+                # configuration is wrong and we can't contact sorenson server
+                cleanup_after_failure(file_uri=output_file)
+                db.session.rollback()
+                raise SorensonError("{0}: {1}".format(response.status_code,
+                                                      response.text))
+            data = json.loads(response.text)
+            logging.debug('Encoding Sorenson response {0}'.format(data))
+            job_id = data.get('JobId')
+
+        db.session.commit()
+
+        # Continue here until the job is done
+        status = SorensonStatus.PENDING
+        with status != SorensonStatus.SUCCESS:
+            status, percentage, info = CDSVideo.get_job_status(job_id)
+
+            if callback_function:
+                callback_function(status, percentage, info)
+
+            if status == SorensonStatus.FAILURE:
+                cleanup_after_failure(
+                    object_version=obj, file_instance=file_instance)
+                raise RuntimeError('Error encoding: {0} {1} {2}'.format(
+                    status, precentage, info))
+            elif status == SorensonStatus.REVOKED:
+                cleanup_after_failure(
+                    object_version=obj, file_instance=file_instance)
+                return None
+            # FIXME: better way to put this?
+            time.sleep(randint(1, 10))
+
+        # Set file's location, if job has completed
+        self._clean_file_name(output_file)
+
+        with db.session.begin_nested():
+            fs = get_fs(output_file)
+            checksum = fs.checksum()
+            with fs.open() as f:
+                try:
+                    size = f.size
+                except AttributeError:
+                    # PyFileSystem returns a BufferedReader with no size
+                    size = os.fstat(f.fileno()).st_size
+            file_instance.set_uri(output_file, size, checksum)
+            obj.set_file(file_instance)
+
+        db.sesssion.commit()
+
+        return {'job_id': job_id, 'preset': preset_info, 'object': obj}
+
+    @staticmethod
+    def get_job_status(job_id):
+        """Get status of a given hob from Sorenson server.
+
+        If the job can't be found in the current queue, it's probably done,
+        so we check the archival queue.
+        """
+        current_jobs_url = (
+            current_app.config['CDS_SORENSON_CURRENT_JOBS_STATUS_URL']
+            .format(job_id=job_id))
+        archive_jobs_url = (
+            current_app.config['CDS_SORENSON_ARCHIVE_JOBS_STATUS_URL']
+            .format(job_id=job_id))
+
+        headers = {'Accept': 'application/json'}
+        proxies = current_app.config['CDS_SORENSON_PROXIES']
+        response = requests.get(
+            current_jobs_url, headers=headers, proxies=proxies)
+
+        if response.status_code == 404:
+            # Check the archive URL
+            response = requests.get(
+                archive_jobs_url, headers=headers, proxies=proxies)
+
+        if response.status_code != requests.codes.ok:
+            # TODO Probably there is a better way to do this, retry?
+            status_json = json.load(response.text) if response.text else {}
+            return SorensonStatus.FAILURE, 0, status_json
+
+        if response.text == '':
+            return SorensonStatus.REVOKED, 0, {}
+
+        status_json = json.loads(status)
+        # there are different ways to get the status of a job, depending if
+        # the job was successful, so we should check for the status code in
+        # different places
+        job_status = status_json.get('Status', {}).get('Status')
+        job_progress = status_json.get('Status', {}).get('Progress') or 0
+
+        if not job_status:
+            # status not found? check in different place
+            job_status = status_json.get('StatusStateId')
+
+        status, p_factor = SorensonStatus.to_sorenson_status(job_status)
+
+        return status, job_progress * p_factor, status_json
+
+    @staticmethod
+    def stop_encoding_job(job_id):
+        """Stop encoding job."""
+        delete_url = (current_app.config['CDS_SORENSON_DELETE_URL']
+                      .format(job_id=job_id))
+        headers = {'Accept': 'application/json'}
+        proxies = current_app.config['CDS_SORENSON_PROXIES']
+        response = requests.delete(
+            delete_url, headers=headers, proxies=proxies)
+
+        if response.status_code != requests.codes.ok:
+            raise SorensonError("{0}: {1}".format(response.status_code,
+                                                  response.text))
+        return job_id
+
+
+def default_extract_metadata_callback(extracted_metadata):
+    """."""
+    # TODO: decide which fields we need, do we just flatten the dict?
+    return extracted_metadata
+
+
+__all__ = (
+    'CDSVideo',
+    'start_encoding',
+    'get_all_distinct_qualities',
+    'get_encoding_status',
+    'restart_encoding',
+    'start_encoding',
+    'stop_encoding',
+    'can_be_transcoded',
+)
