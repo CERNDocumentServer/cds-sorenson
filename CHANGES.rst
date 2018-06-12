@@ -25,6 +25,10 @@
 Changes
 =======
 
+Version 0.1.6 (released 2018-06-12)
+
+- Fixed issue with very low size videos
+
 Version 0.1.5 (released 2018-03-05)
 
 - Initial public release.
