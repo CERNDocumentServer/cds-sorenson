@@ -31,28 +31,31 @@ from collections import OrderedDict
 CDS_SORENSON_USERNAME = ''
 CDS_SORENSON_PASSWORD = ''
 """Username and password to access the video on the filesystem.
-
 Not needed anymore as we set the access rights on eos for webcast user.
 
 Important: The username and password will be visible in the metadata on the
 Sorenson server, so please use a separate account just for Sorenson!
 """
 
-CDS_SORENSON_SUBMIT_URL = 'http://sorenson01.cern.ch/api/jobs'
+CDS_SORENSON_API_USERNAME = None
+CDS_SORENSON_API_PASSWORD = None
+"""Username and password to authenticate against sorenson api endpoint."""
+
+CDS_SORENSON_SUBMIT_URL = 'http://sorenson.cern.ch/api/jobs'
 """Sorenson endpoint for submitting a new transcoding job."""
 
-CDS_SORENSON_DELETE_URL = 'http://sorenson01.cern.ch/api/jobs/{job_id}'
+CDS_SORENSON_DELETE_URL = 'http://sorenson.cern.ch/api/jobs/{job_id}'
 """Sorenson endpoint for deleting a transcoding job."""
 
 CDS_SORENSON_CURRENT_JOBS_STATUS_URL = \
-    'http://sorenson01.cern.ch/api/jobs/status/{job_id}'
+    'http://sorenson.cern.ch/api/jobs/status/{job_id}'
 """Sorenson endpoint for getting the status of a job waiting in the queue."""
 
 CDS_SORENSON_ARCHIVE_JOBS_STATUS_URL = \
-    'http://sorenson01.cern.ch/api/jobs/archive/{job_id}'
+    'http://sorenson.cern.ch/api/jobs/archive/{job_id}'
 """Sorenson endpoint for getting the status of an archived (done) job."""
 
-CDS_SORENSON_DEFAULT_QUEUE = '064153dd-ade2-4824-8458-88e6ea03d395'
+CDS_SORENSON_DEFAULT_QUEUE = None
 """Default queue for all transcoding jobs."""
 
 CDS_SORENSON_PRESETS = OrderedDict([

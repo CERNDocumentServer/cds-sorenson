@@ -37,7 +37,8 @@ from cds_sorenson import CDSSorenson
 def config():
     """Config for testing purposes."""
     return dict(
-        TESTING=True
+        TESTING=True,
+        CDS_SORENSON_DEFAULT_QUEUE='064153dd-ade2-4824-8458-88e6ea03d395'
     )
 
 
