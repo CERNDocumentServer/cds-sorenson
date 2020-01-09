@@ -73,9 +73,15 @@ def start_encoding(input_file, output_file, desired_quality,
                                              preset_config['preset_id'])
     proxies = current_app.config['CDS_SORENSON_PROXIES']
     headers = {'Accept': 'application/json'}
+
+    api_username = current_app.config['CDS_SORENSON_API_USERNAME']
+    api_password = current_app.config['CDS_SORENSON_API_PASSWORD']
+    auth = (api_username, api_password) if api_username and api_password else \
+        None
+
     response = requests.post(current_app.config['CDS_SORENSON_SUBMIT_URL'],
                              headers=headers, json=json_params,
-                             proxies=proxies)
+                             proxies=proxies, auth=auth)
 
     data = json.loads(response.text)
 
