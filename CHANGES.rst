@@ -25,6 +25,11 @@
 Changes
 =======
 
+Version 0.1.7 (released 2020-01-10)
+
+- Integrate new sorenson clusters.
+- Adding authentication parameters for sorenson api.
+
 Version 0.1.6 (released 2018-06-12)
 
 - Fixed issue with very low size videos

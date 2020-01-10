@@ -1,8 +1,8 @@
 =====================
- cds-sorenson v0.1.6
+ cds-sorenson v0.1.7
 =====================
 
-cds-sorenson v0.1.6 was released on June 12, 2018.
+cds-sorenson v0.1.7 was released on January 10, 2020.
 
 About
 -----
@@ -17,7 +17,7 @@ What's new
 Installation
 ------------
 
-   $ pip install cds-sorenson==0.1.6
+   $ pip install cds-sorenson==0.1.7
 
 Documentation
 -------------
