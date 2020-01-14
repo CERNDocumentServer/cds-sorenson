@@ -25,6 +25,10 @@
 Changes
 =======
 
+Version 0.1.8 (released 2020-01-14)
+
+- Adding authentication parameters for get status in sorenson api.
+
 Version 0.1.7 (released 2020-01-10)
 
 - Integrate new sorenson clusters.
