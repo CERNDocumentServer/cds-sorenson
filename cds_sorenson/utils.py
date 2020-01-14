@@ -88,11 +88,17 @@ def get_status(job_id):
     headers = {'Accept': 'application/json'}
     proxies = current_app.config['CDS_SORENSON_PROXIES']
 
-    response = requests.get(current_jobs_url, headers=headers, proxies=proxies)
+    api_username = current_app.config['CDS_SORENSON_API_USERNAME']
+    api_password = current_app.config['CDS_SORENSON_API_PASSWORD']
+    auth = (api_username, api_password) if api_username and api_password else \
+        None
+
+    response = requests.get(
+        current_jobs_url, headers=headers, proxies=proxies, auth=auth)
 
     if response.status_code == 404:
         response = requests.get(
-            archive_jobs_url, headers=headers, proxies=proxies)
+            archive_jobs_url, headers=headers, proxies=proxies, auth=auth)
 
     if response.status_code == requests.codes.ok:
         return response.text
