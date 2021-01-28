@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+    branches: master
+  pull_request:
+    branches: master
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Reason'
+        required: false
+        default: 'Manual trigger'
+
+jobs:
+  Tests:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        python-version: [2.7, 3.5]
+        requirements-level: [min, pypi]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Generate dependencies
+        run: |
+          python -m pip install --upgrade "pip>=20,<21" setuptools py
+          python -m pip install wheel coveralls requirements-builder configparser
+          pip freeze
+          requirements-builder --level=${{ matrix.requirements-level }} setup.py > .ci-${{ matrix.requirements-level }}-${{ matrix.python-version }}-requirements.txt
+
+      - name: Cache pip
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('.ci-${{ matrix.requirements-level }}-${{ matrix.python-version }}-requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          pip install -r .ci-${{ matrix.requirements-level }}-${{ matrix.python-version }}-requirements.txt
+          pip install -e .[all]
+          pip freeze
+
+      - name: Run tests
+        run: |
+          ./run-tests.sh

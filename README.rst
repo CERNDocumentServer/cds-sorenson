@@ -25,25 +25,7 @@
  cds-sorenson
 ==============
 
-.. image:: https://img.shields.io/travis/CERNDocumentServer/cds-sorenson.svg
-        :target: https://travis-ci.org/CERNDocumentServer/cds-sorenson
-
-.. image:: https://img.shields.io/coveralls/CERNDocumentServer/cds-sorenson.svg
-        :target: https://coveralls.io/r/CERNDocumentServer/cds-sorenson
-
-.. image:: https://img.shields.io/github/tag/CERNDocumentServer/cds-sorenson.svg
-        :target: https://github.com/CERNDocumentServer/cds-sorenson/releases
-
-.. image:: https://img.shields.io/pypi/dm/cds-sorenson.svg
-        :target: https://pypi.python.org/pypi/cds-sorenson
-
-.. image:: https://img.shields.io/github/license/CERNDocumentServer/cds-sorenson.svg
-        :target: https://github.com/CERNDocumentServer/cds-sorenson/blob/master/LICENSE
-
-
 CDS API to use Sorenson transcoding server
-
-*This is an experimental developer preview release.*
 
 * Free software: GPLv2 license
 * Documentation: https://pythonhosted.org/cds-sorenson/
