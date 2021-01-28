@@ -41,7 +41,7 @@ from .utils import _filepath_for_samba, generate_json_for_encoding, get_status
 
 def start_encoding(input_file, output_file, desired_quality,
                    display_aspect_ratio, max_height=None, max_width=None,
-                   **kwargs):
+                   job_name=None, **kwargs):
     """Encode a video that is already in the input folder.
 
     :param input_file: string with the filename, something like
@@ -70,7 +70,8 @@ def start_encoding(input_file, output_file, desired_quality,
 
     # Build the request of the encoding job
     json_params = generate_json_for_encoding(input_file, output_file,
-                                             preset_config['preset_id'])
+                                             preset_config['preset_id'],
+                                             job_name=job_name)
     proxies = current_app.config['CDS_SORENSON_PROXIES']
     headers = {'Accept': 'application/json'}
 
@@ -78,6 +79,13 @@ def start_encoding(input_file, output_file, desired_quality,
     api_password = current_app.config['CDS_SORENSON_API_PASSWORD']
     auth = (api_username, api_password) if api_username and api_password else \
         None
+
+    # hide password info from the logs
+    to_log = json.dumps(json_params, indent=4, sort_keys=True)
+    to_log = to_log.replace(current_app.config['CDS_SORENSON_PASSWORD'], '***')
+
+    current_app.logger.debug(
+        'Sending job to Sorenson with payload:\n{0}\n'.format(to_log))
 
     response = requests.post(current_app.config['CDS_SORENSON_SUBMIT_URL'],
                              headers=headers, json=json_params,

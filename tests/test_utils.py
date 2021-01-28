@@ -146,6 +146,30 @@ def test_generate_json_for_encoding(app):
     validate(output, sorenson_schema)
     assert output == expected_output
 
+    expected_output_with_custom_job_name = {
+        'QueueId': '064153dd-ade2-4824-8458-88e6ea03d395',
+        'JobMediaInfo': {
+            'CompressionPresetList': [{
+                'PresetId': 'dc2187a3-8f64-4e73-b458-7370a88d92d7'
+            }],
+            'DestinationList': [{
+                'FileUri': '/tmp/test_another_output.mp4'
+            }],
+            'SourceMediaList': [{
+                'Password': '',
+                'UserName': '',
+                'FileUri': '/tmp/test_another_file.mp4'
+            }]},
+        'Name': 'test job name'
+    }
+    output = generate_json_for_encoding('/tmp/test_another_file.mp4',
+                                        '/tmp/test_another_output.mp4',
+                                        'dc2187a3-8f64-4e73-b458-7370a88d92d7',
+                                        job_name='test job name')
+
+    validate(output, sorenson_schema)
+    assert output == expected_output_with_custom_job_name
+
 
 def test_get_preset_config(app):
     """Test `_get_preset_config` function."""

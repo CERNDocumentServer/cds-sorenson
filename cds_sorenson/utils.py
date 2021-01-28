@@ -34,15 +34,18 @@ from flask import current_app
 from .error import SorensonError
 
 
-def generate_json_for_encoding(input_file, output_file, preset_id):
+def generate_json_for_encoding(input_file, output_file, preset_id,
+                               job_name=None):
     """Generate JSON that will be sent to Sorenson server to start encoding."""
     current_preset = _get_preset_config(preset_id)
     # Make sure the preset config exists for a given preset_id
     if not current_preset:
         raise SorensonError('Invalid preset "{0}"'.format(preset_id))
 
+    default_job_name = 'CDS File:{0} Preset:{1}'.format(input_file, preset_id)
+
     return dict(
-        Name='CDS File:{0} Preset:{1}'.format(input_file, preset_id),
+        Name=job_name or default_job_name,
         QueueId=current_app.config['CDS_SORENSON_DEFAULT_QUEUE'],
         JobMediaInfo=dict(
             SourceMediaList=[dict(
